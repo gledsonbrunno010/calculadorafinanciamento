@@ -61,50 +61,61 @@ const loadImage = (url: string): Promise<string | null> => {
     });
 };
 
+
 export const generatePDF = async (data: SimulationData) => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const margin = 20;
 
-    // Title
-    doc.setFontSize(22);
-    doc.setTextColor(0, 0, 0); // Black
+    // --- Header ---
+    doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text('Relatório de Análise de Crédito', pageWidth / 2, 20, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+    doc.text('RELATÓRIO DE SIMULAÇÃO DE FINANCIAMENTO', pageWidth / 2, 20, { align: 'center' });
 
-    // Header line
-    doc.setDrawColor(200, 200, 200);
-    doc.setLineWidth(0.5);
-    doc.line(margin, 25, pageWidth - margin, 25);
-
-    // Reset font
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    doc.text(`Gerado em: ${dateStr}`, pageWidth / 2, 26, { align: 'center' });
 
+    // doc.ln(5) is not standard jsPDF, using y offset
     let y = 35;
     const lineHeight = 7;
 
-    // Helper to add sections
-    const addSectionTitle = (title: string, iconStr: string = '') => {
-        y += 5;
-        doc.setFontSize(12);
+    // Helper: Section Title with Gray Background
+    const addSectionTitle = (title: string) => {
+        // Check for page break
+        if (y + 15 > doc.internal.pageSize.getHeight() - 20) {
+            doc.addPage();
+            y = 20;
+        }
+
+        doc.setFillColor(230, 230, 230); // Light Gray
+        doc.rect(margin, y, pageWidth - (margin * 2), 8, 'F');
+
+        doc.setFontSize(11);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(234, 88, 12); // Orange-600
-        doc.text(`${iconStr} ${title}`.trim(), margin, y);
-        y += 8;
-        doc.setFontSize(10);
-        doc.setTextColor(0, 0, 0); // Black
-        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(0, 0, 0);
+        doc.text(title.toUpperCase(), margin + 2, y + 5.5);
+
+        y += 12;
     };
 
     const addLine = (label: string, value: string, valueColor: [number, number, number] = [0, 0, 0]) => {
+        if (y + 7 > doc.internal.pageSize.getHeight() - 20) {
+            doc.addPage();
+            y = 20;
+        }
+
+        doc.setFontSize(10);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(0, 0, 0);
         doc.text(label, margin, y);
 
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(valueColor[0], valueColor[1], valueColor[2]);
-        const valueX = 95;
+        const valueX = 90; // Fixed alignment for values
         doc.text(value, valueX, y);
 
         doc.setTextColor(0, 0, 0); // Reset
@@ -112,9 +123,9 @@ export const generatePDF = async (data: SimulationData) => {
     };
 
     // 1️⃣ DADOS DO FINANCIAMENTO
-    addSectionTitle('1. DADOS DA OPERAÇÃO');
+    addSectionTitle('1. DADOS DO FINANCIAMENTO');
 
-    const typeLabel = data.clientType === 'imobiliario' ? 'Crédito Imobiliário' : 'Crédito Veículo';
+    const typeLabel = data.clientType === 'imobiliario' ? 'Financiamento Imobiliário' : 'Financiamento Automotivo';
     addLine('Modalidade:', typeLabel);
     addLine('Valor do Bem:', formatCurrency(data.loanAmount));
     addLine('Valor de Entrada:', formatCurrency(data.availableDownPayment));
@@ -122,19 +133,22 @@ export const generatePDF = async (data: SimulationData) => {
     addLine('Sistema de Amortização:', data.systemOfAmortization);
     addLine('Prazo:', `${data.months} meses`);
     addLine('Taxa de Juros:', `${data.monthlyRate.toFixed(2)}% a.m.`);
-    addLine('Valor da Parcela (Inicial):', formatCurrency(data.monthlyInstallment));
+    addLine('Valor da Parcela:', formatCurrency(data.monthlyInstallment));
+    y += 3;
 
     // 2️⃣ ANÁLISE DA RENDA ATUAL
-    addSectionTitle('2. ANÁLISE DA RENDA');
+    addSectionTitle('2. ANÁLISE DA RENDA ATUAL');
 
     const maxInstallment = data.clientIncome * 0.30;
     const incomeStatus = data.clientIncome >= data.minIncome ? "Possível Aprovação" : "Renda Insuficiente";
-    const incomeColor: [number, number, number] = data.clientIncome >= data.minIncome ? [22, 163, 74] : [220, 38, 38];
+    // Cor do status baseado na lógica original, pode ajustar se quiser
+    const statusColor: [number, number, number] = data.clientIncome >= data.minIncome ? [0, 0, 0] : [0, 0, 0];
 
     addLine('Renda Informada:', formatCurrency(data.clientIncome));
-    addLine('Limite de Parcela (30%):', formatCurrency(maxInstallment));
-    addLine('Comprometimento Real:', `${data.commitment.toFixed(2)}%`);
-    addLine('Status da Renda:', incomeStatus, incomeColor);
+    addLine('Parcela Máxima (30%):', formatCurrency(maxInstallment));
+    addLine('Percentual de Comprometimento:', `${data.commitment.toFixed(2)}%`);
+    addLine('Status:', incomeStatus, statusColor);
+    y += 3;
 
     // 3️⃣ RENDA MÍNIMA NECESSÁRIA
     addSectionTitle('3. RENDA MÍNIMA NECESSÁRIA');
@@ -143,93 +157,85 @@ export const generatePDF = async (data: SimulationData) => {
     const adjustmentNeeded = deficit > 0 ? (deficit / data.clientIncome) * 100 : 0;
 
     addLine('Renda Mínima Exigida:', formatCurrency(data.minIncome));
-
-    if (deficit > 0) {
-        addLine('Déficit de Renda:', formatCurrency(deficit), [220, 38, 38]);
-        addLine('Ajuste Necessário:', `+${adjustmentNeeded.toFixed(1)}%`, [220, 38, 38]);
-    } else {
-        addLine('Situação:', 'Renda Compatível', [22, 163, 74]);
-    }
+    addLine('Diferença de Renda:', formatCurrency(Math.max(0, deficit)));
+    addLine('Percentual de Ajuste:', `${adjustmentNeeded.toFixed(2)}%`);
+    y += 3;
 
     // 4️⃣ CLASSIFICAÇÃO DE RISCO
     addSectionTitle('4. CLASSIFICAÇÃO DE RISCO');
 
-    let riskColor: [number, number, number] = [0, 0, 0];
-    if (data.riskLevel === 'BAIXO') riskColor = [22, 163, 74];
-    else if (data.riskLevel === 'MODERADO') riskColor = [234, 88, 12];
-    else riskColor = [220, 38, 38];
+    // Risk Box Logic
+    let boxColor: [number, number, number] = [192, 0, 0]; // Red default
+    if (data.riskLevel === 'BAIXO') boxColor = [0, 176, 80]; // Green
+    else if (data.riskLevel === 'MODERADO') boxColor = [255, 192, 0]; // Yellow
 
-    addLine('Nível de Risco:', data.riskLevel, riskColor);
+    doc.setFillColor(boxColor[0], boxColor[1], boxColor[2]);
+    doc.rect(margin, y, pageWidth - (margin * 2), 10, 'F');
 
-    // Justificativa Multi-line
+    doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('Parecer Técnico:', margin, y);
+    doc.setTextColor(255, 255, 255); // White text
+    doc.text(`CLASSIFICAÇÃO DE RISCO: ${data.riskLevel}`, pageWidth / 2, y + 6.5, { align: 'center' });
+
+    y += 15;
+    doc.setTextColor(0, 0, 0);
+
+    // Justificativa
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Justificativa Técnica:', margin, y);
     y += 5;
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(80, 80, 80);
-    const splitJustification = doc.splitTextToSize(data.riskJustification, 170);
+
+    const splitJustification = doc.splitTextToSize(data.riskJustification, pageWidth - (margin * 2));
     doc.text(splitJustification, margin, y);
-    y += (splitJustification.length * 5) + 5;
+    y += (splitJustification.length * 5) + 8;
 
-
-    // --- BANKS SECTION ---
-    // Check space
-    if (y + 40 > doc.internal.pageSize.getHeight() - 20) {
-        doc.addPage();
-        y = margin;
-    }
-
+    // Banks Section (Optional but good to keep if available)
     if (data.banks && data.banks.length > 0) {
-        addSectionTitle('BANCOS RECOMENDADOS');
+        if (y + 35 > doc.internal.pageSize.getHeight() - 20) {
+            doc.addPage();
+            y = 20;
+        }
+
+        addSectionTitle('BANCOS SUGERIDOS');
 
         let bankX = margin;
         for (const bank of data.banks) {
-            // Draw bank logic similar to before but simpler
             doc.setDrawColor(200, 200, 200);
             doc.setFillColor(255, 255, 255);
             doc.rect(bankX, y, 45, 25, 'fd');
 
-            doc.setFontSize(7);
+            doc.setFontSize(8);
             doc.setTextColor(0);
             doc.text(bank.name, bankX + 22.5, y + 12, { align: 'center', maxWidth: 40 });
             doc.text(`${(bank.rate).toFixed(2)}% a.m.`, bankX + 22.5, y + 18, { align: 'center' });
 
-            // Try load logo logic here if needed (omitted for brevity as logic is same)
-            // Re-using the async logo loader logic from previous implementation if available would be best
-            // But for this refactor I will assume the visual boxes are enough or I would need to copy the loop logic
-            // Let's rely on text for now to ensure robustness unless I copy the loop exactly.
-            // I will try to load the logo if provided.
             if (bank.logoUrl) {
                 try {
-                    // Since we are inside async function, we can await
-                    // Ideally we pre-load images but here we just try one by one
                     const logoBase64 = await loadImage(bank.logoUrl);
                     if (logoBase64) {
                         doc.addImage(logoBase64, 'PNG', bankX + 12, y + 2, 20, 8);
                     }
                 } catch (e) { }
             }
-
             bankX += 50;
         }
     }
 
+    // 5️⃣ AVISO LEGAL (Footer)
+    addSectionTitle('5. AVISO LEGAL');
+    // The addSectionTitle adds 12 to y, so we go back a bit for text to be close or just use flow
+    // Layout for Disclaimer
+    const disclaimer = "AVISO LEGAL: Esta simulação não constitui aprovação de crédito. A aprovação está sujeita à análise de crédito, verificação documental, score, capacidade de pagamento e políticas internas da instituição financeira.";
 
-    // 5️⃣ AVISO LEGAL OBRIGATÓRIO (Footer)
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const footerY = pageHeight - 25;
-
-    doc.setFontSize(7);
-    doc.setTextColor(100, 100, 100);
-
-    // Draw line
-    doc.setDrawColor(200, 200, 200);
-    doc.line(margin, footerY - 5, pageWidth - margin, footerY - 5);
-
-    const disclaimer = "AVISO LEGAL: Esta simulação não constitui aprovação de crédito. A aprovação está sujeita à análise de crédito, verificação documental, score, capacidade de pagamento e políticas internas da instituição financeira. Os valores apresentados são estimativas baseadas nas taxas de mercado atuais.";
-
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0, 0, 0);
     const splitDisclaimer = doc.splitTextToSize(disclaimer, pageWidth - (margin * 2));
-    doc.text(splitDisclaimer, pageWidth / 2, footerY, { align: 'center' });
+    doc.text(splitDisclaimer, margin, y);
 
-    doc.save(`analise_${data.clientName.replace(/\s+/g, '_').toLowerCase()}.pdf`);
+    // Filename
+    const safeName = data.clientName ? data.clientName.replace(/\s+/g, '_').toLowerCase() : 'simulacao';
+    doc.save(`${safeName}_analise.pdf`);
 };
