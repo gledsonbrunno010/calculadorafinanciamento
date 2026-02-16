@@ -132,41 +132,66 @@ export const calculateDetailedSimulation = (
 };
 
 // Start of Bank Logic
+// Start of Bank Logic
 const ALL_BANKS = [
-    { name: 'Caixa Econômica Federal', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fa/Caixa_Econ%C3%B4mica_Federal_logo.svg/200px-Caixa_Econ%C3%B4mica_Federal_logo.svg.png', minRate: 0.70, maxRate: 1.40 },
-    { name: 'Banco do Brasil', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/fa/Banco_do_Brasil_logo.svg/200px-Banco_do_Brasil_logo.svg.png', minRate: 0.80, maxRate: 1.50 },
-    { name: 'BRB Banco de Brasília', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/BRB_Banco_de_Bras%C3%ADlia_logo.svg/200px-BRB_Banco_de_Bras%C3%ADlia_logo.svg.png', minRate: 0.75, maxRate: 1.45 },
-    { name: 'Santander', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Banco_Santander_Logotipo.svg/200px-Banco_Santander_Logotipo.svg.png', minRate: 1.00, maxRate: 1.80 },
-    { name: 'Itaú', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Ita%C3%BA_logo.svg/200px-Ita%C3%BA_logo.svg.png', minRate: 1.05, maxRate: 1.85 },
-    { name: 'Bradesco', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Banco_Bradesco_logo_%28horizontal%29.svg/200px-Banco_Bradesco_logo_%28horizontal%29.svg.png', minRate: 1.02, maxRate: 1.82 },
+    {
+        name: 'Caixa Econômica Federal',
+        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fa/Caixa_Econ%C3%B4mica_Federal_logo.svg/800px-Caixa_Econ%C3%B4mica_Federal_logo.svg.png',
+        minRate: 0.60,
+        maxRate: 1.10,
+        type: 'public'
+    },
+    {
+        name: 'Banco do Brasil',
+        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/fa/Banco_do_Brasil_logo.svg/800px-Banco_do_Brasil_logo.svg.png',
+        minRate: 0.75,
+        maxRate: 1.25,
+        type: 'public'
+    },
+    {
+        name: 'Bradesco',
+        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Banco_Bradesco_logo_%28horizontal%29.svg/800px-Banco_Bradesco_logo_%28horizontal%29.svg.png',
+        minRate: 0.90,
+        maxRate: 1.45,
+        type: 'private'
+    },
+    {
+        name: 'Itaú',
+        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Ita%C3%BA_logo.svg/800px-Ita%C3%BA_logo.svg.png',
+        minRate: 0.95,
+        maxRate: 1.55,
+        type: 'private'
+    },
+    {
+        name: 'Santander',
+        logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Banco_Santander_Logotipo.svg/800px-Banco_Santander_Logotipo.svg.png',
+        minRate: 0.98,
+        maxRate: 1.60,
+        type: 'private'
+    }
 ];
 
 export const getRecommendedBanks = (rate: number): BankRecommendation[] => {
-    // Filter banks that cover this rate
-    // We relax the filtering to ensure we always show something relevant
+    // 1. Find banks where the user's rate falls within their range
+    let candidates = ALL_BANKS.filter(b => rate >= b.minRate && rate <= (b.maxRate + 0.2));
 
-    // 1. Try strict range match
-    let candidates = ALL_BANKS.filter(b => rate >= b.minRate && rate <= (b.maxRate + 0.5));
-
-    // 2. Fallback logic ensuring we respect the user's intent: "always that the rate is average... add the logo"
-    // If no candidates, or just to boost variety, add based on low/high logic
+    // 2. If fewer than 3, add banks based on proximity
     if (candidates.length < 3) {
-        if (rate > 1.4) {
-            // High rates -> Private banks
-            const privateBanks = ALL_BANKS.filter(b => ['Santander', 'Itaú', 'Bradesco'].includes(b.name));
-            candidates = [...new Set([...candidates, ...privateBanks])];
-        } else {
-            // Low rates -> Public/Regional banks
-            const publicBanks = ALL_BANKS.filter(b => ['Caixa Econômica Federal', 'Banco do Brasil', 'BRB Banco de Brasília'].includes(b.name));
-            candidates = [...new Set([...candidates, ...publicBanks])];
-        }
+        const others = ALL_BANKS.filter(b => !candidates.includes(b));
+        // Sort by how close the rate is to their range
+        others.sort((a, b) => {
+            const distA = Math.min(Math.abs(rate - a.minRate), Math.abs(rate - a.maxRate));
+            const distB = Math.min(Math.abs(rate - b.minRate), Math.abs(rate - b.maxRate));
+            return distA - distB;
+        });
+        candidates = [...candidates, ...others];
     }
 
     // Return top 3 unique banks
     return candidates.slice(0, 3).map(b => ({
         name: b.name,
         logoUrl: b.logo,
-        rate: rate // Display the user's rate as reference
+        rate: Math.max(b.minRate, Math.min(b.maxRate, rate)) // Display user rate constrained to bank limits
     }));
 };
 

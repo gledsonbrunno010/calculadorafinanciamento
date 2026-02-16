@@ -191,37 +191,61 @@ export const generatePDF = async (data: SimulationData) => {
     doc.text(splitJustification, margin, y);
     y += (splitJustification.length * 5) + 8;
 
-    // Banks Section (Optional but good to keep if available)
+    // --- BANKS SECTION ---
     if (data.banks && data.banks.length > 0) {
-        if (y + 35 > doc.internal.pageSize.getHeight() - 20) {
+        if (y + 40 > doc.internal.pageSize.getHeight() - 20) {
             doc.addPage();
             y = 20;
         }
 
-        addSectionTitle('BANCOS SUGERIDOS');
+        addSectionTitle('BANCOS SUGERIDOS (Referência Fev/2026)');
 
         let bankX = margin;
+
+        // Loop through banks and try to load their images
         for (const bank of data.banks) {
-            doc.setDrawColor(200, 200, 200);
-            doc.setFillColor(255, 255, 255);
-            doc.rect(bankX, y, 45, 25, 'fd');
 
-            doc.setFontSize(8);
-            doc.setTextColor(0);
-            doc.text(bank.name, bankX + 22.5, y + 12, { align: 'center', maxWidth: 40 });
-            doc.text(`${(bank.rate).toFixed(2)}% a.m.`, bankX + 22.5, y + 18, { align: 'center' });
+            // Draw Card Background
+            doc.setDrawColor(220, 220, 220);
+            doc.setFillColor(250, 250, 250);
+            doc.roundedRect(bankX, y, 45, 30, 2, 2, 'FD');
 
+            // Bank Name
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(50);
+            doc.text(bank.name, bankX + 22.5, y + 22, { align: 'center', maxWidth: 40 });
+
+            // Interest Rate
+            doc.setFontSize(9);
+            doc.setTextColor(0, 100, 0); // Dark Green
+            doc.text(`${bank.rate.toFixed(2)}% a.m.`, bankX + 22.5, y + 27, { align: 'center' });
+
+            // Logo Loading
             if (bank.logoUrl) {
                 try {
-                    const logoBase64 = await loadImage(bank.logoUrl);
-                    if (logoBase64) {
-                        doc.addImage(logoBase64, 'PNG', bankX + 12, y + 2, 20, 8);
+                    const logoData = await loadImage(bank.logoUrl);
+                    if (logoData) {
+                        try {
+                            // Center the image horizontally in the box
+                            // Box width = 45. Center = 22.5. Image width = 25?
+                            const imgWidth = 25;
+                            const imgHeight = 10;
+                            const xPos = bankX + (45 - imgWidth) / 2;
+                            doc.addImage(logoData, 'PNG', xPos, y + 3, imgWidth, imgHeight);
+                        } catch (imgErr) {
+                            console.warn("Error adding image to PDF:", imgErr);
+                        }
                     }
-                } catch (e) { }
+                } catch (e) {
+                    console.warn("Failed to load logo for", bank.name);
+                }
             }
+
             bankX += 50;
         }
     }
+
 
     // 5️⃣ AVISO LEGAL (Footer)
     addSectionTitle('5. AVISO LEGAL');
