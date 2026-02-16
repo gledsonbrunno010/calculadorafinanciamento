@@ -133,34 +133,40 @@ export const calculateDetailedSimulation = (
 
 // Start of Bank Logic
 const ALL_BANKS = [
-    { name: 'Caixa Econômica Federal', logo: 'https://placehold.co/200x80/005ca9/ffffff/png?text=CAIXA', minRate: 0.80, maxRate: 1.20 },
-    { name: 'Banco do Brasil', logo: 'https://placehold.co/200x80/fef200/003da5/png?text=BB', minRate: 0.90, maxRate: 1.30 },
-    { name: 'BRB Banco de Brasília', logo: 'https://placehold.co/200x80/005ca9/ffffff/png?text=BRB', minRate: 0.85, maxRate: 1.25 },
-    { name: 'Santander', logo: 'https://placehold.co/200x80/ec0000/ffffff/png?text=Santander', minRate: 1.10, maxRate: 1.60 },
-    { name: 'Itaú', logo: 'https://placehold.co/200x80/ec7000/ffffff/png?text=Itau', minRate: 1.15, maxRate: 1.65 },
-    { name: 'Bradesco', logo: 'https://placehold.co/200x80/cc2229/ffffff/png?text=Bradesco', minRate: 1.12, maxRate: 1.62 },
+    { name: 'Caixa Econômica Federal', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fa/Caixa_Econ%C3%B4mica_Federal_logo.svg/500px-Caixa_Econ%C3%B4mica_Federal_logo.svg.png', minRate: 0.70, maxRate: 1.40 },
+    { name: 'Banco do Brasil', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Banco_do_Brasil_logo.svg/500px-Banco_do_Brasil_logo.svg.png', minRate: 0.80, maxRate: 1.50 },
+    { name: 'BRB Banco de Brasília', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/BRB_Banco_de_Bras%C3%ADlia_logo.svg/500px-BRB_Banco_de_Bras%C3%ADlia_logo.svg.png', minRate: 0.75, maxRate: 1.45 },
+    { name: 'Santander', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Banco_Santander_Logotipo.svg/500px-Banco_Santander_Logotipo.svg.png', minRate: 1.00, maxRate: 1.80 },
+    { name: 'Itaú', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Ita%C3%BA_Unibanco_logo.svg/500px-Ita%C3%BA_Unibanco_logo.svg.png', minRate: 1.05, maxRate: 1.85 },
+    { name: 'Bradesco', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/73/Bradesco_logo.svg/500px-Bradesco_logo.svg.png', minRate: 1.02, maxRate: 1.82 },
 ];
 
 export const getRecommendedBanks = (rate: number): BankRecommendation[] => {
-    // Filter banks that cover this rate overlap
-    // If rate is very high, just show private banks. If low, public.
+    // Filter banks that cover this rate
+    // We relax the filtering to ensure we always show something relevant
 
-    let candidates = ALL_BANKS.filter(b => rate >= b.minRate && rate <= (b.maxRate + 0.5)); // Loose matching
+    // 1. Try strict range match
+    let candidates = ALL_BANKS.filter(b => rate >= b.minRate && rate <= (b.maxRate + 0.5));
 
-    // Fallback if no exact match (e.g. rate 2.0%)
-    if (candidates.length === 0) {
-        // If high rate, return private banks
-        if (rate > 1.5) candidates = ALL_BANKS.filter(b => b.name === 'Santander' || b.name === 'Itaú' || b.name === 'Bradesco');
-        // If low rate (unlikely if filtered out), return public
-        else candidates = ALL_BANKS.filter(b => b.name === 'Caixa Econômica Federal' || b.name === 'Banco do Brasil');
+    // 2. Fallback logic ensuring we respect the user's intent: "always that the rate is average... add the logo"
+    // If no candidates, or just to boost variety, add based on low/high logic
+    if (candidates.length < 3) {
+        if (rate > 1.4) {
+            // High rates -> Private banks
+            const privateBanks = ALL_BANKS.filter(b => ['Santander', 'Itaú', 'Bradesco'].includes(b.name));
+            candidates = [...new Set([...candidates, ...privateBanks])];
+        } else {
+            // Low rates -> Public/Regional banks
+            const publicBanks = ALL_BANKS.filter(b => ['Caixa Econômica Federal', 'Banco do Brasil', 'BRB Banco de Brasília'].includes(b.name));
+            candidates = [...new Set([...candidates, ...publicBanks])];
+        }
     }
 
-    // Sort by proximity to center of their range? Randomize to vary?
-    // Let's just return top 3.
+    // Return top 3 unique banks
     return candidates.slice(0, 3).map(b => ({
         name: b.name,
         logoUrl: b.logo,
-        rate: rate // Just pass the current rate as what they offer
+        rate: rate // Display the user's rate as reference
     }));
 };
 

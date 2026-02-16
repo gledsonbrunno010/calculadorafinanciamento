@@ -26,7 +26,7 @@ interface SimulationData {
     banks: BankRecommendation[]; // NEW
 }
 
-// Helper to load image as Base64 to verify it works or fail gracefully
+// Helper to load image as Base64 and convert to BLACK AND WHITE (Grayscale)
 const loadImage = (url: string): Promise<string | null> => {
     return new Promise((resolve) => {
         const img = new Image();
@@ -37,17 +37,33 @@ const loadImage = (url: string): Promise<string | null> => {
             canvas.height = img.height;
             const ctx = canvas.getContext('2d');
             if (!ctx) { resolve(null); return; }
+
+            // Draw original image
             ctx.drawImage(img, 0, 0);
+
+            // Convert to Grayscale (Black & White)
             try {
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imageData.data;
+                for (let i = 0; i < data.length; i += 4) {
+                    const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+                    data[i] = avg;     // Red
+                    data[i + 1] = avg; // Green
+                    data[i + 2] = avg; // Blue
+                }
+                ctx.putImageData(imageData, 0, 0);
+
                 const dataURL = canvas.toDataURL('image/png');
                 resolve(dataURL);
             } catch (e) {
-                // Tainted canvas
+                // Tainted canvas (CORS error) - return null
+                console.warn('Canvas tainted, cannot process image:', url);
                 resolve(null);
             }
         };
         img.onerror = () => {
             // Fallback to null (don't show image)
+            console.warn('Failed to load image:', url);
             resolve(null);
         };
         img.src = url;
@@ -208,41 +224,54 @@ export const generatePDF = async (data: SimulationData) => {
             // Draw bank container
             doc.setDrawColor(200, 200, 200);
             doc.setFillColor(250, 250, 250);
-            doc.rect(bankX, y, 50, 25, 'FD');
+            // Increased height to accommodate logo + name + rate clearly
+            const boxHeight = 40;
+            const boxWidth = 50;
+            doc.rect(bankX, y, boxWidth, boxHeight, 'FD');
 
             // Try to load logo
+            let logoLoaded = false;
             try {
                 // If logoUrl is available, render
                 if (bank.logoUrl) {
                     const base64 = await loadImage(bank.logoUrl);
                     if (base64) {
                         try {
-                            doc.addImage(base64, 'PNG', bankX + 5, y + 5, 40, 15, undefined, 'FAST');
+                            // Centered Logo
+                            const logoW = 40;
+                            const logoH = 15;
+                            const logoX = bankX + (boxWidth - logoW) / 2;
+                            doc.addImage(base64, 'PNG', logoX, y + 5, logoW, logoH, undefined, 'FAST');
+                            logoLoaded = true;
                         } catch (e) {
                             // Fail silently
                         }
-                    } else {
-                        // Fallback Text if image fails
-                        doc.setFontSize(8);
-                        doc.setTextColor(0);
-                        doc.text(bank.name, bankX + 25, y + 12, { align: 'center', maxWidth: 40 });
                     }
                 }
             } catch (err) {
-                // Fallback Text
-                doc.setFontSize(8);
-                doc.setTextColor(0);
-                doc.text(bank.name, bankX + 25, y + 12, { align: 'center', maxWidth: 40 });
+                // Fallback
             }
 
-            // Rate Text below
+            // Name (if logo didn't load or just small below)
             doc.setFontSize(8);
+            doc.setTextColor(0);
+            doc.setFont('helvetica', 'bold');
+            // If logo loaded, put name smaller below, else bigger centered
+            if (logoLoaded) {
+                doc.text(bank.name, bankX + boxWidth / 2, y + 25, { align: 'center', maxWidth: boxWidth - 4 });
+            } else {
+                doc.text(bank.name, bankX + boxWidth / 2, y + 15, { align: 'center', maxWidth: boxWidth - 4 });
+            }
+
+            // Rate Text below - Completely separated from logo
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(7);
             doc.setTextColor(100);
-            doc.text(`Ref: ${(bank.rate || data.monthlyRate).toFixed(2)}% a.m.`, bankX + 25, y + 22, { align: 'center' });
+            doc.text(`Ref: ${(bank.rate || data.monthlyRate).toFixed(2)}% a.m.`, bankX + boxWidth / 2, y + 35, { align: 'center' });
 
             bankX += 55;
         }
-        y += 35;
+        y += 50; // Increased spacing for next section (footer)
     }
 
 
