@@ -26,7 +26,7 @@ interface SimulationData {
     banks: BankRecommendation[]; // NEW
 }
 
-// Helper to load image as Base64 and convert to BLACK AND WHITE (Grayscale)
+// Helper to load image as Base64 (Standard)
 const loadImage = (url: string): Promise<string | null> => {
     return new Promise((resolve) => {
         const img = new Image();
@@ -38,31 +38,17 @@ const loadImage = (url: string): Promise<string | null> => {
             const ctx = canvas.getContext('2d');
             if (!ctx) { resolve(null); return; }
 
-            // Draw original image
             ctx.drawImage(img, 0, 0);
 
-            // Convert to Grayscale (Black & White)
             try {
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const data = imageData.data;
-                for (let i = 0; i < data.length; i += 4) {
-                    const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-                    data[i] = avg;     // Red
-                    data[i + 1] = avg; // Green
-                    data[i + 2] = avg; // Blue
-                }
-                ctx.putImageData(imageData, 0, 0);
-
                 const dataURL = canvas.toDataURL('image/png');
                 resolve(dataURL);
             } catch (e) {
-                // Tainted canvas (CORS error) - return null
-                console.warn('Canvas tainted, cannot process image:', url);
+                console.warn('Canvas tainted:', url);
                 resolve(null);
             }
         };
         img.onerror = () => {
-            // Fallback to null (don't show image)
             console.warn('Failed to load image:', url);
             resolve(null);
         };
@@ -152,14 +138,14 @@ export const generatePDF = async (data: SimulationData) => {
 
     y += 8;
 
-    // --- RESULT BOX ---
-    // Prepare texts to calculate height
-    doc.setFontSize(11);
+    // --- RESULT BOX (COMPACT) ---
+    doc.setFontSize(10);
     const reasonText = `Parecer: ${data.approvalReason}`;
 
     doc.setFont('helvetica', 'normal');
     const splitReason = doc.splitTextToSize(reasonText, 170);
-    const boxHeight = 40 + (splitReason.length * 6);
+    // Reduced padding and height calculation
+    const boxHeight = 25 + (splitReason.length * 5);
 
     // Define Color based on status
     let boxColor = [240, 253, 244]; // Green-50
@@ -178,30 +164,30 @@ export const generatePDF = async (data: SimulationData) => {
     doc.rect(15, y, 180, boxHeight, 'FD');
 
     // Box Content
-    const contentStartY = y + 10;
+    const contentStartY = y + 8;
 
     // Status Header inside box
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
+    doc.setFontSize(12);
     doc.setTextColor(borderColor[0], borderColor[1], borderColor[2]);
     doc.text(data.approvalStatus, 20, contentStartY);
 
     // Risk Label
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setTextColor(100, 100, 100);
     doc.text(`Nível de Risco: ${data.riskLevel}`, 120, contentStartY);
 
     // Divider inside box
     doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
     doc.setLineWidth(0.1);
-    doc.line(20, contentStartY + 5, 185, contentStartY + 5);
+    doc.line(20, contentStartY + 3, 185, contentStartY + 3);
 
-    // Reason Text
+    // Reason Text (Smaller)
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(50, 50, 50);
-    doc.text(splitReason, 20, contentStartY + 12);
+    doc.text(splitReason, 20, contentStartY + 9);
 
-    y += boxHeight + 10;
+    y += boxHeight + 8; // Reduced spacing after box
 
     // --- FINANCIAL SUMMARY ---
     addSectionTitle('PROJEÇÃO DE PAGAMENTO');
@@ -211,33 +197,31 @@ export const generatePDF = async (data: SimulationData) => {
     addLine('Total a Pagar:', formatCurrency(data.totalPaid));
     addLine('Custo Efetivo Total (CET):', formatCurrency(data.cet));
 
-    y += 8;
+    y += 4; // Minimal spacing before banks
 
     // --- RECOMMENDED BANKS ---
     // Here we list the banks and try to show their logos
     // --- RECOMMENDED BANKS ---
     const pageHeight = doc.internal.pageSize.getHeight();
 
-    // Check if we need a new page before starting the bank section
-    // Estimate section height: title (8) + content (50)
-    if (y + 60 > pageHeight - margin) {
+    // Only skip page if REALLY needed. We want this on the first page.
+    if (y + 40 > pageHeight - 15) {
         doc.addPage();
         y = margin;
     }
 
     if (data.banks && data.banks.length > 0) {
-        addSectionTitle('BANCOS RECOMENDADOS (Taxa Compatível)');
+        addSectionTitle('BANCOS RECOMENDADOS');
 
         let bankX = margin;
 
         for (const bank of data.banks) {
-            // Check horizontal space (unlikely to overflow with 3 items, but good practice)
-            // Draw bank container
+            // Check horizontal space
             doc.setDrawColor(200, 200, 200);
-            doc.setFillColor(250, 250, 250);
+            doc.setFillColor(255, 255, 255); // White background for logos
 
-            // Reduced size as requested ("um pouco mais pequena")
-            const boxHeight = 35;
+            // Compact Box
+            const boxHeight = 28;
             const boxWidth = 45;
 
             doc.rect(bankX, y, boxWidth, boxHeight, 'FD');
@@ -249,11 +233,12 @@ export const generatePDF = async (data: SimulationData) => {
                     const base64 = await loadImage(bank.logoUrl);
                     if (base64) {
                         try {
-                            // Smaller Centered Logo
-                            const logoW = 30; // Reduced from 40
-                            const logoH = 12; // Reduced from 15
+                            // Logo Sizing
+                            const logoW = 25;
+                            const logoH = 10;
                             const logoX = bankX + (boxWidth - logoW) / 2;
-                            doc.addImage(base64, 'PNG', logoX, y + 5, logoW, logoH, undefined, 'FAST');
+                            // Add image with explicit alias to avoid cache collisions
+                            doc.addImage(base64, 'PNG', logoX, y + 4, logoW, logoH, undefined, 'FAST');
                             logoLoaded = true;
                         } catch (e) { /* ignore */ }
                     }
@@ -261,22 +246,22 @@ export const generatePDF = async (data: SimulationData) => {
             } catch (err) { /* ignore */ }
 
             // Name
-            doc.setFontSize(7); // Smaller font
+            doc.setFontSize(6);
             doc.setTextColor(0);
             doc.setFont('helvetica', 'bold');
 
-            const nameY = logoLoaded ? y + 22 : y + 15;
-            doc.text(bank.name, bankX + boxWidth / 2, nameY, { align: 'center', maxWidth: boxWidth - 4 });
+            const nameY = logoLoaded ? y + 18 : y + 12;
+            doc.text(bank.name, bankX + boxWidth / 2, nameY, { align: 'center', maxWidth: boxWidth - 2 });
 
             // Rate Text below
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(6);
             doc.setTextColor(100);
-            doc.text(`Ref: ${(bank.rate || data.monthlyRate).toFixed(2)}% a.m.`, bankX + boxWidth / 2, y + 30, { align: 'center' });
+            doc.text(`${(bank.rate || data.monthlyRate).toFixed(2)}% a.m.`, bankX + boxWidth / 2, y + 24, { align: 'center' });
 
-            bankX += 50; // Reduced spacing
+            bankX += 48;
         }
-        y += 45;
+        y += 35;
     }
 
     // Footer Logic with Page Check
