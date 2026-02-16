@@ -163,39 +163,7 @@ export const generatePDF = async (data: SimulationData) => {
 
     // 3. DETALHAMENTO DAS PARCELAS
     y += 4;
-    addSection("3. DETALHAMENTO DAS PARCELAS");
-
-    addInfoLine("Média da Parcela:", formatCurrency(data.monthlyInstallment));
-    addInfoLine("1ª Parcela (Estimada):", formatCurrency(data.monthlyInstallment));
-    addInfoLine("Última Parcela (Estimada):", formatCurrency(data.monthlyInstallment));
-
-    const parcelaMaxima = data.clientIncome * 0.30;
-    addInfoLine("Parcela Máxima Permitida (30%):", formatCurrency(parcelaMaxima));
-
-    // Color logic for commitment
-    const commColor = data.commitment > 30 ? [200, 0, 0] : [0, 100, 0];
-    // Custom handling for colored value
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    const labelComm = "Comprometimento Atual:";
-    doc.setTextColor(80, 80, 80);
-    doc.text(labelComm, margin, y);
-
-    // Line layout
-    const commValText = `${data.commitment.toFixed(2)}%`;
-    const w1 = doc.getTextWidth(labelComm);
-    const w2 = doc.getTextWidth(commValText);
-    const d1 = margin + w1 + 2;
-    const d2 = pageWidth - margin - w2 - 2;
-    if (d2 > d1) {
-        doc.setDrawColor(200, 200, 200);
-        doc.line(d1, y, d2, y);
-    }
-
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(commColor[0] as number, commColor[1] as number, commColor[2] as number);
-    doc.text(commValText, pageWidth - margin, y, { align: 'right' });
-    y += 8;
+    addInfoLine("Total a Pagar:", formatCurrency(data.totalPaid), true);
 
     drawFooter(1);
 
@@ -204,99 +172,40 @@ export const generatePDF = async (data: SimulationData) => {
     // ===============================
     doc.addPage();
     drawHeader();
-    y = 35; // Reset Y
+    y = 33;
 
-    // 4. RESULTADO DA ANÁLISE
-    addSection("4. RESULTADO DA ANÁLISE");
-    y += 5;
+    addSection("3. RESULTADO DA ANÁLISE");
+    const deficit = Math.max(0, data.minIncome - data.clientIncome);
+    const ajuste = deficit > 0 ? (deficit / data.clientIncome) * 100 : 0;
 
-    // Status Box centered
-    const isApproved = data.clientIncome >= data.minIncome && data.riskLevel !== 'ALTO';
-    const statusText = isApproved ? "APROVADO" : "REPROVADO";
-    const statusColor: [number, number, number] = isApproved ? [22, 163, 74] : [220, 38, 38]; // Tailwind Green-600 / Red-600
+    addInfoLine("Renda Mínima Necessária:", formatCurrency(data.minIncome), true);
+    addInfoLine("Diferença de Renda:", formatCurrency(deficit));
+    addInfoLine("Percentual de Ajuste:", `${ajuste.toFixed(2)}%`);
 
-    // Draw stylized box
-    const boxHeight = 24;
-    doc.setDrawColor(statusColor[0], statusColor[1], statusColor[2]);
-    doc.setLineWidth(0.5);
-    doc.setFillColor(250, 250, 250);
-    doc.roundedRect(margin, y, pageWidth - (margin * 2), boxHeight, 2, 2, 'FD');
-
-    // Inner Status Badge
-    doc.setFillColor(statusColor[0], statusColor[1], statusColor[2]);
-    doc.roundedRect(margin + 5, y + 5, pageWidth - (margin * 2) - 10, 8, 1, 1, 'F');
-
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(255, 255, 255);
-    doc.text(`STATUS DA ANÁLISE: ${statusText}`, pageWidth / 2, y + 10.5, { align: 'center' });
-
-    // Little summary below status
-    y += 18;
-    // const deficit = Math.max(0, data.minIncome - data.clientIncome);
-    // const ajuste = deficit > 0 ? (deficit / data.clientIncome) * 100 : 0;
-
-    doc.setFontSize(9);
-    doc.setTextColor(80, 80, 80);
-    doc.text(`Renda Mínima: ${formatCurrency(data.minIncome)}`, pageWidth / 2, y, { align: 'center' });
-    y += 15; // Gap after box
-
-    // Risk Analysis
-    let riskColor: [number, number, number] = [100, 100, 100];
-    if (data.riskLevel === 'BAIXO') riskColor = [22, 163, 74];
-    else if (data.riskLevel === 'MODERADO') riskColor = [234, 179, 8];
-    else if (data.riskLevel === 'ALTO') riskColor = [220, 38, 38];
-
-    // Risk Header
-    doc.setFillColor(riskColor[0], riskColor[1], riskColor[2]);
-    doc.rect(margin, y, pageWidth - (margin * 2), 8, 'F');
+    addSection("4. JUSTIFICATIVA TÉCNICA");
     doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(255, 255, 255);
-    doc.text(`CLASSIFICAÇÃO DE RISCO: ${data.riskLevel}`, margin + 5, y + 5.5);
-    y += 12;
-
-    // Justification Content
-    doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(50, 50, 50);
-    const justificationTitle = "Justificativa Técnica:";
-    doc.text(justificationTitle, margin, y);
-    y += 5;
+    const justification = data.riskJustification || "Análise baseada nos dados fornecidos.";
+    const splitJust = doc.splitTextToSize(justification, pageWidth - (margin * 2));
+    doc.text(splitJust, margin, y);
+    y += (splitJust.length * 5) + 6; // Multi-cell spacing approx
 
-    const splitJustification = doc.splitTextToSize(data.riskJustification || "Análise baseada nos dados fornecidos.", pageWidth - (margin * 2));
-    doc.text(splitJustification, margin, y);
-    y += (splitJustification.length * 5) + 8;
+    addSection("5. CONFORMIDADE REGULATÓRIA");
 
-    // 5. CONFORMIDADE & LEGAL (Side by side or stacked cleanly)
-    addSection("5. CONFORMIDADE E DIRETRIZES");
+    const lgpdText = "Em conformidade com a Lei nº 13.709/2018 (LGPD), os dados pessoais foram tratados exclusivamente para análise financeira simulada.";
+    const splitLgpd = doc.splitTextToSize(lgpdText, pageWidth - (margin * 2));
+    doc.text(splitLgpd, margin, y);
+    y += (splitLgpd.length * 5) + 2; // ln(2)
 
-    doc.setFontSize(8);
-    doc.setTextColor(100, 100, 100);
+    const bacenText = "Esta simulação segue as diretrizes prudenciais do Banco Central do Brasil, incluindo avaliação de capacidade de pagamento e transparência no cálculo do CET.";
+    const splitBacen = doc.splitTextToSize(bacenText, pageWidth - (margin * 2));
+    doc.text(splitBacen, margin, y);
+    y += (splitBacen.length * 5);
 
-    const complianceText = [
-        "LGPD (Lei nº 13.709/2018): Dados tratados exclusivamente para simulação financeira, respeitando finalidade e segurança.",
-        "",
-        "BANCO CENTRAL: Simulação segue diretrizes prudenciais, com transparência no CET e avaliação de capacidade de pagamento."
-    ];
-
-    for (const line of complianceText) {
-        const splitLine = doc.splitTextToSize(line, pageWidth - (margin * 2));
-        doc.text(splitLine, margin, y);
-        y += (splitLine.length * 4) + 2;
-    }
-
-    // 7. AVISO LEGAL FOOTER
-    const footerY = pageHeight - 25;
-    doc.setDrawColor(200, 200, 200);
-    doc.line(margin, footerY, pageWidth - margin, footerY);
-
-    doc.setFontSize(7);
-    doc.setTextColor(150, 150, 150);
-    const aviso = "AVISO LEGAL: Esta simulação não constitui aprovação de crédito. A concessão está sujeita a análise formal de crédito, revisão documental e política interna.";
-    // splitTextToSize returns string[] or string, text() handles string[], align center handles X centering
-    const splitAviso = doc.splitTextToSize(aviso, pageWidth - (margin * 2));
-    doc.text(splitAviso, pageWidth / 2, footerY + 5, { align: 'center' });
+    addSection("6. AVISO LEGAL");
+    const avisoText = "Esta simulação não constitui aprovação de crédito. A aprovação depende de análise formal, verificação documental e políticas internas da instituição.";
+    const splitAviso = doc.splitTextToSize(avisoText, pageWidth - (margin * 2));
+    doc.text(splitAviso, margin, y);
 
     drawFooter(2);
 
