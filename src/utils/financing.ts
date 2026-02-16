@@ -206,35 +206,127 @@ export interface CreditScoreInput {
     score: number; // 0-1000
     hasDebts: boolean; // Dívidas ativas
     age: number;
+    type: 'imobiliario' | 'veiculo';
+    months: number;
+    monthlyRate: number;
 }
 
-export const calculateCreditApproval = (input: CreditScoreInput): { approved: boolean; reason: string; riskLevel: string } => {
+export interface ApprovalResult {
+    approved: boolean;
+    reason: string;
+    riskLevel: 'BAIXO' | 'MODERADO' | 'ALTO' | 'CRÍTICO';
+    riskJustification: string;
+    minIncome: number;
+    commitment: number;
+}
+
+export const calculateMinimumIncome = (installment: number): number => {
+    return installment / 0.30;
+};
+
+export const calculateCreditApproval = (input: CreditScoreInput): ApprovalResult => {
     const commitment = (input.installment / input.income) * 100;
+    const minIncome = calculateMinimumIncome(input.installment);
 
+    // Initial Output Structure
+    const result: ApprovalResult = {
+        approved: false,
+        reason: '',
+        riskLevel: 'ALTO', // Default conservative
+        riskJustification: '',
+        minIncome: minIncome,
+        commitment: commitment
+    };
+
+    // 1. Critical Stoppers
     if (input.hasDebts) {
-        return { approved: false, reason: 'Reprovado: Possui dívidas ativas registradas.', riskLevel: 'CRÍTICO' };
+        result.approved = false;
+        result.riskLevel = 'CRÍTICO';
+        result.reason = 'Reprovado: Possui dívidas ativas registradas no mercado.';
+        result.riskJustification = 'Presença de restrições cadastrais impede a concessão de novo crédito.';
+        return result;
     }
 
-    if (input.score < 600) {
-        return { approved: false, reason: 'Reprovado: Score abaixo de 600 pontos não permite financiamento neste projeto.', riskLevel: 'ALTO' };
+    if (input.score < 300) {
+        result.approved = false;
+        result.riskLevel = 'CRÍTICO';
+        result.reason = 'Reprovado: Score de crédito insuficiente para análise.';
+        result.riskJustification = 'Histórico de crédito recente ou volume de consultas impactam negativamente o risco.';
+        return result;
     }
 
-    if (commitment > 30) {
-        return {
-            approved: false,
-            reason: `Reprovado: Comprometimento de renda (${commitment.toFixed(1)}%) excede o limite de 30%.`,
-            riskLevel: 'ALTO'
-        };
+    // 2. Income Check (Absolute Rule)
+    if (input.income < minIncome) {
+        result.approved = false;
+        result.riskLevel = 'ALTO';
+        result.reason = 'Renda insuficiente para possível aprovação.';
+        const deficit = minIncome - input.income;
+        result.riskJustification = `A renda atual apresenta um déficit de ${formatCurrency(deficit)} para suportar a parcela com segurança dentro do limite de 30%.`;
+        return result;
     }
 
-    // Score 600+ is now considered valid for approval
-    if (input.score < 700) {
-        return {
-            approved: true,
-            reason: 'Aprovado com Restrições: Score intermediário (600-700).',
-            riskLevel: 'MÉDIO'
-        };
+    // 3. Sophisticated Risk Classification
+    // Base params per type
+    const isImob = input.type === 'imobiliario';
+    const marketRateAvg = isImob ? 1.0 : 2.0;
+    const highTermThreshold = isImob ? 360 : 60;
+
+    // Rules
+    const isLowCommitment = commitment <= 25;
+    const isModerateCommitment = commitment > 25 && commitment <= 30;
+
+    // Risk Level Determination
+    if (isLowCommitment && input.months <= highTermThreshold && input.monthlyRate <= (marketRateAvg * 1.2)) {
+        result.riskLevel = 'BAIXO';
+    } else if (isModerateCommitment || input.months > highTermThreshold || input.monthlyRate > (marketRateAvg * 1.2)) {
+        result.riskLevel = 'MODERADO';
     }
 
-    return { approved: true, reason: 'Aprovado: Perfil de crédito sólido.', riskLevel: 'BAIXO' };
+    // High Risk overrides
+    // "Comprometimento muito próximo de 30% + Prazo Máximo + Juros Elevados"
+    // Or just being close to the limit with other factors
+    if (commitment > 29 || (commitment > 28 && input.months >= highTermThreshold)) {
+        result.riskLevel = 'ALTO';
+    }
+
+    // 4. Approval Decision based on Score vs Risk
+    // Lower scores require Lower Risk for approval
+    if (input.score >= 700) {
+        result.approved = true;
+        result.reason = 'Possível aprovação sujeita à análise de crédito.';
+    } else if (input.score >= 500) {
+        if (result.riskLevel === 'BAIXO' || result.riskLevel === 'MODERADO') {
+            result.approved = true;
+            result.reason = 'Possível aprovação com restrições de taxa ou prazo.';
+        } else {
+            result.approved = false;
+            result.reason = 'Risco elevado para o perfil de score atual.';
+        }
+    } else {
+        // Score < 500
+        if (result.riskLevel === 'BAIXO') {
+            result.approved = true;
+            result.reason = 'Análise manual requerida devido ao score.';
+        } else {
+            result.approved = false;
+            result.reason = 'Score incompatível com o nível de risco da operação.';
+        }
+    }
+
+    // Justification Text Generation
+    const riskText = result.riskLevel === 'BAIXO' ? 'Baixo Risco' : result.riskLevel === 'MODERADO' ? 'Risco Moderado' : 'Risco Elevado';
+
+    let justification = `Classificação: ${riskText}. Comprometimento de renda em ${commitment.toFixed(2)}%. `;
+
+    if (result.riskLevel === 'BAIXO') {
+        justification += 'Cenário favorável com folga orçamentária.';
+    } else if (result.riskLevel === 'MODERADO') {
+        justification += `Atenção ao prazo de ${input.months} meses e taxa de juros aplicada.`;
+    } else {
+        justification += 'Capacidade de pagamento no limite prudencial recomendado.';
+    }
+
+    result.riskJustification = justification;
+
+    return result;
 };

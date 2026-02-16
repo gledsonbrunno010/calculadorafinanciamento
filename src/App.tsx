@@ -10,7 +10,7 @@ import {
   formatCurrency,
   calculateAge,
 } from './utils/financing';
-import type { SimulationResult } from './utils/financing';
+import type { SimulationResult, ApprovalResult } from './utils/financing';
 import { generatePDF } from './utils/pdf';
 import './index.css';
 
@@ -45,7 +45,7 @@ function App() {
   const [cet, setCet] = useState<number>(0);
   const [requiredDownPayment, setRequiredDownPayment] = useState<number>(0);
   const [annualRate, setAnnualRate] = useState<number>(0);
-  const [approvalResult, setApprovalResult] = useState<{ approved: boolean; reason: string; riskLevel: string } | null>(null);
+  const [approvalResult, setApprovalResult] = useState<ApprovalResult | null>(null);
 
   // Formats
   const safeIncome = typeof income === 'number' ? income : 0;
@@ -57,16 +57,16 @@ function App() {
     setAnnualRate(calculateAnnualRate(rate));
   }, [monthlyRate]);
 
-  // Adjust Defaults based on Type Selection (Correction: Only update Rate, keep System independent)
+  // Adjust Defaults based on Type Selection
   useEffect(() => {
     if (type === 'imobiliario') {
       // Market Reference Feb/2026: ~12.60% a.a. => ~0.99% a.m.
       setMonthlyRate(0.99);
-      // System independent
+      if (months < 120) setMonths(360); // Default to longer term
     } else {
       // Market Reference Feb/2026: ~26.2% a.a. => ~1.95% a.m.
       setMonthlyRate(1.95);
-      // System independent
+      if (months > 96) setMonths(60); // Default to shorter term
     }
   }, [type]);
 
@@ -82,8 +82,8 @@ function App() {
     setIsAnalyzing(true);
     setProgress(0);
 
-    // Simulate Analysis Process (approx 5 seconds)
-    const intervalTime = 50;
+    // Simulate Analysis Process (approx 3 seconds)
+    const intervalTime = 30;
     const timer = setInterval(() => {
       setProgress(old => {
         if (old >= 100) {
@@ -120,7 +120,7 @@ function App() {
         return;
       }
 
-      // Run Advanced Simulation (Correction removed)
+      // Run Advanced Simulation
       const simResult = calculateDetailedSimulation(
         principal,
         safeMonthlyRate / 100,
@@ -133,15 +133,17 @@ function App() {
       setCet(calculateCET(simResult.firstInstallment, months, principal));
 
       // 3. Approval Logic
-      // 3. Approval Logic
-      const age = calculateAge(birthDate) || 25; // Default age if not provided to avoid NaN issues in logic
+      const age = calculateAge(birthDate) || 25; // Default age if not provided
 
       const approval = calculateCreditApproval({
         income: safeIncome,
         installment: simResult.firstInstallment,
         score,
         hasDebts,
-        age
+        age,
+        type: type,
+        months: months,
+        monthlyRate: safeMonthlyRate
       });
 
       setApprovalResult(approval);
@@ -187,6 +189,9 @@ function App() {
         approvalStatus: approvalResult.approved ? 'APROVADO' : 'REPROVADO',
         approvalReason: approvalResult.reason,
         riskLevel: approvalResult.riskLevel,
+        riskJustification: approvalResult.riskJustification,
+        minIncome: approvalResult.minIncome,
+        commitment: approvalResult.commitment,
         banks: simulationResult.banks
       });
     } catch (error) {
@@ -340,9 +345,15 @@ function App() {
               <div className="swiss-input-group mb-0">
                 <label className="swiss-label">Prazo</label>
                 <select value={months} onChange={e => setMonths(Number(e.target.value))} className="swiss-input text-lg bg-transparent py-2 border-b">
-                  {[12, 24, 36, 48, 60, 72, 84, 96, 120, 180, 240, 300, 360, 420].map(m => (
-                    <option key={m} value={m}>{m} meses</option>
-                  ))}
+                  {type === 'imobiliario' ? (
+                    [60, 120, 180, 240, 300, 360, 420].map(m => (
+                      <option key={m} value={m}>{m} meses ({m / 12} anos)</option>
+                    ))
+                  ) : (
+                    [12, 24, 36, 48, 60, 72].map(m => (
+                      <option key={m} value={m}>{m} meses ({m / 12} anos)</option>
+                    ))
+                  )}
                 </select>
               </div>
 
@@ -353,7 +364,7 @@ function App() {
               </div>
             </div>
 
-            {/* SYSTEM SELECTOR - Independent now */}
+            {/* SYSTEM SELECTOR */}
             <div className="mt-6">
               <div className="swiss-input-group mb-0">
                 <label className="swiss-label">Sistema de Amortização</label>
@@ -416,22 +427,30 @@ function App() {
             <p className="text-sm uppercase tracking-widest">Aguardando Cálculo</p>
             <p className="text-xs mt-2 text-center">Simulador atualizado com taxas Fev/2026.<br />Preencha os dados à esquerda.</p>
           </div>
-        ) : !isAnalyzing && calculated && simulationResult ? (
+        ) : !isAnalyzing && calculated && simulationResult && approvalResult ? (
           <div className="animate-entry h-full flex flex-col justify-between">
 
             {/* RESULTADO DE APROVAÇÃO */}
-            <div className={`p-6 rounded-lg mb-6 border-l-4 ${approvalResult?.approved && approvalResult?.riskLevel !== 'CRÍTICO' ? (approvalResult?.riskLevel === 'MÉDIO' ? 'bg-orange-900/20 border-orange-500' : 'bg-green-900/20 border-green-500') : 'bg-red-900/20 border-red-500'}`}>
+            <div className={`p-6 rounded-lg mb-6 border-l-4 ${approvalResult.approved ? (
+                approvalResult.riskLevel === 'BAIXO' ? 'bg-green-900/20 border-green-500' : 'bg-orange-900/20 border-orange-500'
+              ) : 'bg-red-900/20 border-red-500'
+              }`}>
               <h2 className="text-sm font-mono uppercase tracking-widest mb-2 text-slate-400">Status da Análise</h2>
               <div className="flex items-center gap-3 mb-2">
-                {approvalResult?.approved
-                  ? <CheckCircle className={approvalResult?.riskLevel === 'MÉDIO' ? "text-orange-500" : "text-green-500"} size={32} />
+                {approvalResult.approved
+                  ? <CheckCircle className={approvalResult.riskLevel === 'BAIXO' ? "text-green-500" : "text-orange-500"} size={32} />
                   : <XCircle className="text-red-500" size={32} />
                 }
                 <span className="text-2xl font-bold font-display leading-none">
-                  {approvalResult?.approved ? (approvalResult?.riskLevel === 'MÉDIO' ? 'APROVADO C/ RESTRIÇÃO' : 'APROVADO') : 'REPROVADO'}
+                  {approvalResult.approved ? (approvalResult.riskLevel === 'BAIXO' ? 'PRÉ-APROVADO' : 'APROVADO RESSALVAS') : 'REPROVADO'}
                 </span>
               </div>
-              <p className="text-sm text-slate-300 mt-2 leading-relaxed">{approvalResult?.reason}</p>
+              <p className="text-sm text-slate-300 mt-2 leading-relaxed">{approvalResult.reason}</p>
+              {approvalResult.riskLevel !== 'BAIXO' && (
+                <p className="text-xs text-slate-400 mt-2 font-mono border-t border-slate-600/30 pt-2">
+                  Risco: {approvalResult.riskLevel} - {approvalResult.riskJustification}
+                </p>
+              )}
             </div>
 
             {/* NUMBERS */}
@@ -479,7 +498,8 @@ function App() {
                   </div>
                 </div>
 
-                <div className="text-xs text-slate-500 mt-4 border-t border-slate-800 pt-2">
+                <div className={`text-xs mt-4 border-t border-slate-800 pt-2 font-bold ${(safeIncome > 0 && (simulationResult.firstInstallment / safeIncome) > 0.30) ? 'text-red-500' : 'text-slate-500'
+                  }`}>
                   Comprometimento Inicial: {safeIncome > 0 ? ((simulationResult.firstInstallment / safeIncome) * 100).toFixed(1) : '0.0'}% da renda
                 </div>
               </div>
