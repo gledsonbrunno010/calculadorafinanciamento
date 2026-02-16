@@ -215,8 +215,8 @@ export const calculateCreditApproval = (input: CreditScoreInput): { approved: bo
         return { approved: false, reason: 'Reprovado: Possui dívidas ativas registradas.', riskLevel: 'CRÍTICO' };
     }
 
-    if (input.score < 300) {
-        return { approved: false, reason: 'Reprovado: Score de crédito muito baixo (Risco Elevado).', riskLevel: 'ALTO' };
+    if (input.score < 600) {
+        return { approved: false, reason: 'Reprovado: Score abaixo de 600 pontos não permite financiamento neste projeto.', riskLevel: 'ALTO' };
     }
 
     if (commitment > 30) {
@@ -227,10 +227,11 @@ export const calculateCreditApproval = (input: CreditScoreInput): { approved: bo
         };
     }
 
-    if (input.score < 600) {
+    // Score 600+ is now considered valid for approval
+    if (input.score < 700) {
         return {
             approved: true,
-            reason: 'Aprovado com Restrições: Score médio exige entrada maior ou fidador.',
+            reason: 'Aprovado com Restrições: Score intermediário (600-700).',
             riskLevel: 'MÉDIO'
         };
     }

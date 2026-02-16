@@ -172,10 +172,14 @@ export const generatePDF = async (data: SimulationData) => {
     doc.setTextColor(borderColor[0], borderColor[1], borderColor[2]);
     doc.text(data.approvalStatus, 20, contentStartY);
 
-    // Risk Label
-    doc.setFontSize(9);
+    // Score & Risk Label
+    doc.setFontSize(10);
+    doc.setTextColor(50, 50, 50);
+    doc.text(`Score: ${data.clientScore}`, 145, contentStartY); // Score Display
+
+    doc.setFontSize(8);
     doc.setTextColor(100, 100, 100);
-    doc.text(`Nível de Risco: ${data.riskLevel}`, 120, contentStartY);
+    doc.text(`Risco: ${data.riskLevel}`, 145, contentStartY + 4);
 
     // Divider inside box
     doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
