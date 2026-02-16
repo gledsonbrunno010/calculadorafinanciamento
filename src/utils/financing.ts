@@ -133,12 +133,12 @@ export const calculateDetailedSimulation = (
 
 // Start of Bank Logic
 const ALL_BANKS = [
-    { name: 'Caixa Econômica Federal', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/f/fa/Caixa_Econ%C3%B4mica_Federal_logo.svg/500px-Caixa_Econ%C3%B4mica_Federal_logo.svg.png', minRate: 0.70, maxRate: 1.40 },
-    { name: 'Banco do Brasil', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/9/91/Banco_do_Brasil_logo.svg/500px-Banco_do_Brasil_logo.svg.png', minRate: 0.80, maxRate: 1.50 },
-    { name: 'BRB Banco de Brasília', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/BRB_Banco_de_Bras%C3%ADlia_logo.svg/500px-BRB_Banco_de_Bras%C3%ADlia_logo.svg.png', minRate: 0.75, maxRate: 1.45 },
-    { name: 'Santander', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Banco_Santander_Logotipo.svg/500px-Banco_Santander_Logotipo.svg.png', minRate: 1.00, maxRate: 1.80 },
-    { name: 'Itaú', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Ita%C3%BA_Unibanco_logo.svg/500px-Ita%C3%BA_Unibanco_logo.svg.png', minRate: 1.05, maxRate: 1.85 },
-    { name: 'Bradesco', logo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/73/Bradesco_logo.svg/500px-Bradesco_logo.svg.png', minRate: 1.02, maxRate: 1.82 },
+    { name: 'Caixa Econômica Federal', logo: 'https://logo.clearbit.com/caixa.gov.br', minRate: 0.70, maxRate: 1.40 },
+    { name: 'Banco do Brasil', logo: 'https://logo.clearbit.com/bb.com.br', minRate: 0.80, maxRate: 1.50 },
+    { name: 'BRB Banco de Brasília', logo: 'https://logo.clearbit.com/brb.com.br', minRate: 0.75, maxRate: 1.45 },
+    { name: 'Santander', logo: 'https://logo.clearbit.com/santander.com.br', minRate: 1.00, maxRate: 1.80 },
+    { name: 'Itaú', logo: 'https://logo.clearbit.com/itau.com.br', minRate: 1.05, maxRate: 1.85 },
+    { name: 'Bradesco', logo: 'https://logo.clearbit.com/bradesco.com.br', minRate: 1.02, maxRate: 1.82 },
 ];
 
 export const getRecommendedBanks = (rate: number): BankRecommendation[] => {

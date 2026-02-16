@@ -215,72 +215,88 @@ export const generatePDF = async (data: SimulationData) => {
 
     // --- RECOMMENDED BANKS ---
     // Here we list the banks and try to show their logos
+    // --- RECOMMENDED BANKS ---
+    const pageHeight = doc.internal.pageSize.getHeight();
+
+    // Check if we need a new page before starting the bank section
+    // Estimate section height: title (8) + content (50)
+    if (y + 60 > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+    }
+
     if (data.banks && data.banks.length > 0) {
         addSectionTitle('BANCOS RECOMENDADOS (Taxa Compatível)');
 
         let bankX = margin;
 
         for (const bank of data.banks) {
+            // Check horizontal space (unlikely to overflow with 3 items, but good practice)
             // Draw bank container
             doc.setDrawColor(200, 200, 200);
             doc.setFillColor(250, 250, 250);
-            // Increased height to accommodate logo + name + rate clearly
-            const boxHeight = 40;
-            const boxWidth = 50;
+
+            // Reduced size as requested ("um pouco mais pequena")
+            const boxHeight = 35;
+            const boxWidth = 45;
+
             doc.rect(bankX, y, boxWidth, boxHeight, 'FD');
 
             // Try to load logo
             let logoLoaded = false;
             try {
-                // If logoUrl is available, render
                 if (bank.logoUrl) {
                     const base64 = await loadImage(bank.logoUrl);
                     if (base64) {
                         try {
-                            // Centered Logo
-                            const logoW = 40;
-                            const logoH = 15;
+                            // Smaller Centered Logo
+                            const logoW = 30; // Reduced from 40
+                            const logoH = 12; // Reduced from 15
                             const logoX = bankX + (boxWidth - logoW) / 2;
                             doc.addImage(base64, 'PNG', logoX, y + 5, logoW, logoH, undefined, 'FAST');
                             logoLoaded = true;
-                        } catch (e) {
-                            // Fail silently
-                        }
+                        } catch (e) { /* ignore */ }
                     }
                 }
-            } catch (err) {
-                // Fallback
-            }
+            } catch (err) { /* ignore */ }
 
-            // Name (if logo didn't load or just small below)
-            doc.setFontSize(8);
+            // Name
+            doc.setFontSize(7); // Smaller font
             doc.setTextColor(0);
             doc.setFont('helvetica', 'bold');
-            // If logo loaded, put name smaller below, else bigger centered
-            if (logoLoaded) {
-                doc.text(bank.name, bankX + boxWidth / 2, y + 25, { align: 'center', maxWidth: boxWidth - 4 });
-            } else {
-                doc.text(bank.name, bankX + boxWidth / 2, y + 15, { align: 'center', maxWidth: boxWidth - 4 });
-            }
 
-            // Rate Text below - Completely separated from logo
+            const nameY = logoLoaded ? y + 22 : y + 15;
+            doc.text(bank.name, bankX + boxWidth / 2, nameY, { align: 'center', maxWidth: boxWidth - 4 });
+
+            // Rate Text below
             doc.setFont('helvetica', 'normal');
-            doc.setFontSize(7);
+            doc.setFontSize(6);
             doc.setTextColor(100);
-            doc.text(`Ref: ${(bank.rate || data.monthlyRate).toFixed(2)}% a.m.`, bankX + boxWidth / 2, y + 35, { align: 'center' });
+            doc.text(`Ref: ${(bank.rate || data.monthlyRate).toFixed(2)}% a.m.`, bankX + boxWidth / 2, y + 30, { align: 'center' });
 
-            bankX += 55;
+            bankX += 50; // Reduced spacing
         }
-        y += 50; // Increased spacing for next section (footer)
+        y += 45;
     }
 
+    // Footer Logic with Page Check
+    // If footer doesn't fit, new page
+    if (y + 15 > pageHeight - margin) {
+        doc.addPage();
+        y = margin + 10;
+    }
 
-    // Footer
-    const pageHeight = doc.internal.pageSize.getHeight();
+    // Position Footer at bottom (or at y if new page)
+    const footerY = pageHeight - 15;
+
+    // We want footer at the bottom of the CURRENT page if it fits, or bottom of NEW page.
+    // Actually standard reports put footer at bottom of every page, but here we just stamp the end.
+    // Let's just put it at bottom of the last page used.
+
     doc.setFontSize(8);
     doc.setTextColor(150);
-    doc.text(`Documento gerado em ${new Date().toLocaleDateString('pt-BR')} as ${new Date().toLocaleTimeString('pt-BR')}`, pageWidth / 2, pageHeight - 15, { align: 'center' });
-    doc.text('Aprovação sujeita a análise definitiva de documentos e política de crédito vigente.', pageWidth / 2, pageHeight - 10, { align: 'center' });
+    doc.text(`Documento gerado em ${new Date().toLocaleDateString('pt-BR')} as ${new Date().toLocaleTimeString('pt-BR')}`, pageWidth / 2, footerY, { align: 'center' });
+    doc.text('Aprovação sujeita a análise definitiva de documentos e política de crédito vigente.', pageWidth / 2, footerY + 5, { align: 'center' });
 
     doc.save(`analise_${data.clientName.replace(/\s+/g, '_').toLowerCase()}.pdf`);
 };
